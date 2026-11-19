@@ -25,7 +25,7 @@ Mở PySpark shell bằng `make spark-basics` để thử lệnh ngắn. Spark c
 
 ## Bài tập
 
-Hoàn thành các TODO theo thứ tự dưới đây. Các lệnh chạy từ thư mục gốc.
+Bài 01 và 02 có lời giải để bạn chạy và đọc code. Bài 03 dừng ở từng bước để bạn tự quan sát Spark UI. Các lệnh chạy từ thư mục gốc.
 
 | Bài | Việc cần làm | Cách tự kiểm tra |
 |---|---|---|
@@ -39,10 +39,22 @@ uv run --locked python spark_basics/02_sql.py
 uv run --locked python spark_basics/03_lazy_evaluation.py
 ```
 
-Để quan sát lazy evaluation, dùng `spark.range()` trước vì bước suy luận schema khi đọc file có thể tự chạy job. Khi làm bài DataFrame và SQL, kiểm tra kiểu cột `event_time` ở cả hai định dạng trước khi nhóm theo ngày.
+Với mẫu EdNet hiện tại, Spark suy luận `event_time` là `string` từ JSON và `timestamp` từ CSV. Cột `metadata` có kiểu `struct` trong JSON và `string` trong CSV. Hai bài đầu chuẩn hóa `event_time` về ngày UTC trước khi đếm.
+
+### Quan sát Spark UI trong bài 03
+
+Script in URL Spark UI khi khởi động. Mở URL đó trong trình duyệt và dùng cùng tab suốt bài. Nhấn Enter trong terminal để đi tiếp sau khi đã quan sát.
+
+| Điểm dừng | Quan sát |
+|---|---|
+| Sau `filter()` và `explain()` | Tab **Jobs** đang trống. `filter()` thêm phép lọc vào kế hoạch và `explain()` in kế hoạch. `spark.range()` tạo đầu vào đơn giản để tránh các job do suy luận schema khi đọc file. |
+| Sau `evens.count()` | Terminal in **50**. Tab **Jobs** có job của `Count even IDs`. Action `count()` yêu cầu Spark tính kết quả. Phép lọc xử lý từng partition, còn tổng đếm toàn cục có thể gom kết quả từng partition về một partition. |
+| Sau khi chạy grouped count | Terminal in bốn bucket, mỗi bucket **25**. Trong tab **SQL**, mở truy vấn mới nhất và tìm `Exchange` với `hashpartitioning` theo `bucket`. Trong **Stages**, tìm số liệu **Shuffle Write** và **Shuffle Read** để thấy dữ liệu được chuyển giữa các stage. |
+
+Mỗi task xử lý một partition trong một stage. Ở phép nhóm, Spark tính số đếm cục bộ rồi chuyển các kết quả có cùng `bucket` về cùng partition để gộp. `local[2]` cho phép chạy tối đa hai task đồng thời trong bài. Adaptive Query Execution có thể gộp các partition nhỏ sau shuffle, vì vậy số task sau shuffle có thể ít hơn bốn. [Tài liệu Spark UI](https://spark.apache.org/docs/4.0.3/monitoring.html), [Tài liệu Adaptive Query Execution](https://spark.apache.org/docs/4.0.3/sql-performance-tuning.html#adaptive-query-execution)
 
 ## Hoàn thành Phase 1
 
-- [ ] Hoàn thành ba script và đối chiếu bảng đếm theo ngày.
-- [ ] Lưu ghi chú và một ảnh Spark UI vào `spark_basics/` từ kết quả bạn quan sát.
+- [x] Hoàn thành ba script và đối chiếu bảng đếm theo ngày.
+- [x] Lưu [ghi chú kết quả](notes.md) và [ảnh Spark UI](spark_ui_grouped_count.png) từ lần chạy bài 03.
 - [ ] Tự giải thích trong hai phút driver làm gì, partition liên quan thế nào đến task, action tạo job ra sao và vì sao shuffle có thể chia job thành nhiều stage.
