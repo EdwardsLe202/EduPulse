@@ -1,0 +1,9 @@
+[project]
+name = "edupulse"
+version = "0.1.0"
+description = "A hands-on Spark and MLOps project using EdNet learning events."
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "pandas>=2.2,<3",
+    "pyspark==4.0.3",
+]

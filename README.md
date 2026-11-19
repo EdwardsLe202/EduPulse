@@ -5,6 +5,8 @@
 > **Duration:** 12 tuần (gợi ý 10–15 giờ/tuần).  
 > **Goal:** Có một project GitHub chạy được từ local, có tài liệu, test, metrics và demo production-like.
 
+[Bắt đầu Phase 1 — Spark Foundations](spark_basics/README.md)
+
 ---
 
 ## 1. Mục tiêu học tập
@@ -46,9 +48,9 @@ Một nền tảng học tiếng Anh có học viên xem video, làm quiz, học
 |---|---|---|
 | `event_id` | string | `evt_00001` |
 | `student_id` | string | `stu_001` |
-| `event_type` | string | `video_started`, `video_completed`, `quiz_submitted`, `session_ended` |
+| `event_type` | string | `video_started`, `video_stopped`, `quiz_answered`, `quiz_submitted` |
 | `event_time` | timestamp | UTC timestamp |
-| `ingest_time` | timestamp | UTC timestamp |
+| `ingest_time` | timestamp nullable | UTC, để trống khi nguồn lịch sử thiếu thời điểm ingest |
 | `video_id` | string nullable | `vid_42` |
 | `duration_sec` | integer nullable | `420` |
 | `quiz_score` | float nullable | `0.8` |
@@ -74,13 +76,12 @@ Một nền tảng học tiếng Anh có học viên xem video, làm quiz, học
 **`interventions`**: `student_id`, `experiment_id`, `variant`, `assigned_at`, `delivered_at`.  
 **`outcomes`**: `student_id`, `returned_7d`, `observed_until`.
 
-### 2.3. Tạo dữ liệu
+### 2.3. Nguồn dữ liệu và benchmark
 
-- Giai đoạn đầu: tạo **100.000–500.000 events** bằng Python/Faker, có seed cố định để tái lập.
-- Trung cấp: **1–5 triệu events** lưu Parquet để học partitions, joins và shuffle.
-- Nâng cao: Kafka producer tạo **50–300 events/giây** trong thử nghiệm local, tùy máy.
-- Chủ động inject: duplicate events, null fields, invalid scores, late events, out-of-order timestamps, skewed students, schema change.
-- Tất cả số liệu là **mục tiêu benchmark hoặc dữ liệu mô phỏng**, không phải thành tích đã đo.
+- **Phase 1:** `make generate-data` dùng [EdNet KT3 trên Hugging Face](https://huggingface.co/datasets/mgor/EDNet/viewer/kt3/train), log tương tác thật từ Santa, nền tảng luyện TOEIC. Bộ mẫu chọn 10.000 events từ một tuần theo timestamp đã được dịch bởi bên phát hành. [Nguồn gốc và giấy phép CC BY-NC 4.0](https://github.com/riiid/ednet#license)
+- **Batch và training:** Mở rộng sang nhiều shard Parquet để học partitions, joins và shuffle. Khi train churn, dùng lịch sử đầy đủ của các học viên được chọn và giới hạn snapshot theo cửa sổ có đủ 7 ngày theo dõi.
+- **Streaming và kiểm thử:** Replay log lịch sử qua Kafka. Dùng `make generate-synthetic-data` để tạo fixture có thể tái lập. Dùng fixture để thêm duplicates, invalid scores, late events, skew và schema changes, hoặc mô phỏng các event như AI Tutor và intervention.
+- **Deploy demo:** EdNet dùng cho học tập và nghiên cứu phi thương mại. Với ứng dụng thương mại, dùng dữ liệu first-party được phép sử dụng hoặc nguồn có giấy phép phù hợp.
 
 ### 2.4. Định nghĩa target tránh leakage
 
@@ -185,7 +186,9 @@ s3://<your-bucket>/mlflow-artifacts/
 ### Phase 1 — Week 1: Spark foundations (zero → basic)
 
 **Learn:** Spark vs Pandas, JVM + PySpark, SparkSession, Driver/Executor, cluster manager, SparkContext, lazy evaluation; narrow vs wide transformations; DAG, job/stage/task; `show`, `collect`, `count` (actions).  
-**Build:** Chạy `docker compose up` cho Spark hoặc cài local; đọc file JSON/CSV, filter, select, `withColumn`, groupBy; mở Spark UI port 4040.  
+
+**Build:** Chạy Spark local với [bộ bài tập Phase 1](spark_basics/README.md), đọc file JSON/CSV, dùng `filter`, `select`, `withColumn`, `groupBy` và mở Spark UI.
+
 **Exercises:**
 - Cùng một bài đếm events theo ngày bằng Pandas, SQL và Spark.
 - Quan sát vì sao `df.filter(...)` chưa chạy job, `df.count()` mới chạy.
@@ -197,9 +200,10 @@ s3://<your-bucket>/mlflow-artifacts/
 ### Phase 2 — Week 2: DataFrame, Spark SQL & ETL
 
 **Learn:** schema inference vs explicit schema, casting, null handling, UDF vs built-in functions, joins (inner/left/anti), window functions, groupBy, `explode`, timestamp/timezone, JSON extraction.  
-**Build:** Generate mock events, data cleaning, reject invalid events, daily student statistics.  
+**Build:** Đọc EdNet, làm sạch và tổng hợp thống kê theo ngày. Dùng fixture mô phỏng để kiểm thử việc loại event lỗi.
+
 **Exercises:**
-- Tính `learning_minutes_7d`, `quiz_accuracy_7d`, `sessions_7d`, `completion_rate_7d`.
+- Tính `quiz_accuracy_7d` theo `quiz_answered` và số lần nộp bài theo `quiz_submitted`. Dùng fixture có duration và tín hiệu hoàn thành để kiểm thử `learning_minutes_7d` và `completion_rate_7d`.
 - Dùng `row_number` để chọn event mới nhất trong duplicate `event_id`.
 - So sánh Python UDF và Spark built-ins trên cùng dataset.
 
@@ -496,7 +500,7 @@ edupulse-mlops/
 9. API p95 tăng do model cold start hoặc feature lookup.
 10. A/B treatment leakage / sample-ratio mismatch / sai đơn vị randomization.
 
-**Security & privacy basics:** Không đưa PII hoặc raw learner prompts vào logs mặc định. Dùng fake/synthetic data, redact sensitive text, secrets qua env/secret manager, hạn chế truy cập dashboard/S3/MLflow, validate incoming events, giới hạn retention cho traces/logs.
+**Security & privacy basics:** Dùng EdNet và fixture mô phỏng theo mục đích đã ghi ở phần nguồn dữ liệu. Loại PII và nội dung prompt của học viên khỏi logs mặc định, dùng env/secret manager cho secrets, hạn chế truy cập dashboard/S3/MLflow, validate incoming events và giới hạn retention cho traces/logs.
 
 **Trade-offs:** Batch vs streaming; micro-batch vs true event-by-event; Parquet vs Delta; Redis cache vs feature store; Spark MLlib vs Scikit-learn; drift-triggered retrain vs periodic retrain; managed cloud vs local Docker; cost vs quality vs latency.
 
@@ -513,20 +517,26 @@ edupulse-mlops/
 
 **Practical:** Docker Compose dùng profiles `data`, `ml`, `llm`, `monitoring`, tránh máy cá nhân quá tải. Đầu tiên chạy dữ liệu nhỏ 10k events, sau mới benchmark 1m–5m. Nếu máy thiếu RAM, tách các services theo giai đoạn.
 
-### Quick commands gợi ý sau khi triển khai repository
+### Chạy Phase 1 trên máy local
 
 ```bash
 make install
 make generate-data
+make phase1-check
 make spark-basics
+```
+
+`make spark-basics` mở PySpark shell. Xem [hướng dẫn Phase 1](spark_basics/README.md) để chạy từng bài và kiểm tra kết quả.
+
+### Lệnh dự kiến cho các phase sau
+
+```bash
 make batch-etl
 make test
 make train
 make serve
 make benchmark
 ```
-
-> Các lệnh `make` này là **interface dự kiến để bạn tự implement**, không phải lệnh có sẵn từ file plan.
 
 ---
 
